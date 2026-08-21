@@ -1,5 +1,7 @@
 # Plant Energy MCP Server
 
+[Documentación en español](README_ES.md)
+
 `plant-energy-mcp` is a local Model Context Protocol (MCP) server for a small industrial energy-management scenario. It exposes deterministic tools for inspecting equipment, recording cumulative meter readings, calculating consumption, detecting threshold alerts, and producing an energy report.
 
 This repository implements MCP manually on JSON-RPC 2.0. It does **not** use FastMCP, an MCP SDK, or any framework that hides the protocol exchange.
