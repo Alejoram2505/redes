@@ -1,268 +1,251 @@
-# Plant Energy MCP Server
+# Plant Energy MCP Host
 
-[Documentación en español](README_ES.md)
+## Overview
 
-`plant-energy-mcp` is a local Model Context Protocol (MCP) server for a small industrial energy-management scenario. It exposes deterministic tools for inspecting equipment, recording cumulative meter readings, calculating consumption, detecting threshold alerts, and producing an energy report.
+This CC3067 Networks Project 1 implements a terminal chatbot that connects a real LLM API to three MCP servers: the official Filesystem server, the official Git server, and the custom `plant-energy-mcp` industrial energy server. The project implements its host, JSON-RPC client, local MCP server, and Streamable HTTP adapter manually. It does **not** use FastMCP or an MCP SDK for those components. The two course-required official servers retain their own upstream dependencies.
 
-This repository implements MCP manually on JSON-RPC 2.0. It does **not** use FastMCP, an MCP SDK, or any framework that hides the protocol exchange.
+The industrial scenario monitors cumulative energy readings for plant equipment, calculates consumption, detects threshold alerts, and creates deterministic reports.
 
-## Current partial-delivery scope
+## Current evidence status
 
-This delivery contains only the student-defined local MCP server required for the first partial submission:
+| Capability | Status |
+|---|---|
+| Custom local MCP over stdio | Implemented and tested |
+| Manual stdio/HTTP MCP clients | Implemented and tested |
+| Session conversation and tool loop | Tested with a fake LLM |
+| OpenAI/Anthropic API adapters | Implemented; live test requires the student's key/model |
+| Official Filesystem + Git isolated demo | Tested locally |
+| Custom remote transport | Tested on localhost; Docker build blocked because Docker Desktop was stopped; cloud deployment pending authorization |
+| Wireshark evidence | Procedure ready; capture pending Wireshark and a deployed URL |
 
-- MCP protocol version `2025-11-25`
-- local `stdio` transport
-- one JSON message per line
-- `initialize` and `notifications/initialized`
-- `ping`, `tools/list`, and `tools/call`
-- JSON-RPC errors for parse failures, invalid requests or parameters, unknown methods, and internal failures
-- five industrial energy tools
-- an executable subprocess demo and automated integration tests
-
-It does not include a remote MCP server, cloud deployment, packet capture, Wireshark analysis, a user interface, or the final OSI/TCP-IP report.
+No cloud resource is created by the repository commands unless the user explicitly runs the deployment command.
 
 ## Architecture
 
 ```text
-MCP client / demo.py
-        |
-        | line-delimited JSON-RPC 2.0 over stdin/stdout
-        v
-plant_energy_mcp/server.py       stdio transport only
-        |
-plant_energy_mcp/protocol.py     parsing, lifecycle, dispatch, errors
-        |
-plant_energy_mcp/tools.py        tool schemas and input validation
-        |
-plant_energy_mcp/service.py      business rules and demo state
+Terminal user
+    -> mcp_host chatbot (session history and confirmation policy)
+       -> OpenAI or Anthropic API
+       -> manual MCP client -> official Filesystem server (restricted demo_workspace)
+       -> manual MCP client -> official Git server (restricted demo repository)
+       -> manual MCP client -> plant-energy-mcp
+                              |- stdio subprocess
+                              `- Streamable HTTP /mcp (same dispatcher and tools)
 ```
 
-Human-readable shutdown information is written to `stderr`. Protocol responses are the only content written to `stdout`.
+Important paths:
 
-### Folder structure
-
-```text
-plant_energy_mcp/   server package
-tests/              subprocess integration tests
-demo.py             reproducible MCP session harness
-.env.example        safe configuration template
-README.md           setup, protocol, tools, and demo documentation
-```
+- `mcp_host/`: terminal host, LLM adapters, audit log, configuration, and manual MCP clients.
+- `plant_energy_mcp/`: protocol dispatcher, tools, business service, stdio server, and HTTP server.
+- `demos/`: isolated official-server demo and local/remote parity demo.
+- `tests/`: deterministic tests that require no API key or Internet.
+- `docs/FINAL_REPORT.md`: project specification and evidence ledger.
+- `docs/PRESENTATION_GUIDE.md`: short presentation script.
 
 ## Requirements
 
-- Python 3.10 or newer
-- No third-party Python packages
+- Python 3.11 or newer (tested with Python 3.13.1).
+- Git.
+- Node.js and npm/npx for the official Filesystem server (tested with Node 22.14.0 and npx 10.9.2).
+- `mcp-server-git` for the official Git server.
+- Docker for the optional container workflow (Docker 28.1.1 was detected, but its daemon was not running during verification).
+- An OpenAI or Anthropic API key and model identifier for a live LLM test.
+- Wireshark for the real network capture; it was not installed in the verification environment.
 
 ## Installation
 
-Clone the private repository, enter this project directory, and optionally create an isolated environment.
-
-### PowerShell
+Windows PowerShell:
 
 ```powershell
-git clone <PRIVATE_REPOSITORY_URL>
-cd <REPOSITORY_NAME>
-py -3 -m venv .venv
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m unittest discover -v
+python -m pip install --upgrade pip
+python -m pip install -r requirements-official-mcp.txt
+python -m pip install -r requirements-dev.txt
+Copy-Item .env.example .env
 ```
 
-### POSIX shell
+Linux/macOS:
 
 ```bash
-git clone <PRIVATE_REPOSITORY_URL>
-cd <REPOSITORY_NAME>
 python3 -m venv .venv
-. .venv/bin/activate
-python -m unittest discover -v
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-official-mcp.txt
+python -m pip install -r requirements-dev.txt
+cp .env.example .env
 ```
 
-There is no dependency installation command because the project uses only the Python standard library.
+The project code uses the Python standard library. `requirements-official-mcp.txt` installs only the official Git MCP server and its upstream dependencies. The Filesystem server is obtained by its official npx command when it starts.
 
-## Environment variables
+`.env` is a reference file only; this project does not automatically load it. Export the values in the current shell, or use a trusted environment loader. Never commit `.env`.
 
-The current local server requires no environment variables. `.env.example` documents this explicitly. Do not commit `.env`, API keys, credentials, production meter readings, or other sensitive data.
+OpenAI example:
 
-## Run the MCP server
+```powershell
+$env:LLM_PROVIDER = "openai"
+$env:LLM_API_KEY = Read-Host "LLM API key"
+$env:LLM_MODEL = "your-provider-model-id"
+$env:LLM_BASE_URL = "https://api.openai.com/v1"
+```
 
-```bash
+Anthropic uses `LLM_PROVIDER=anthropic` and the provider's model identifier. No model name or key is hardcoded because availability depends on the student's account.
+
+## Run
+
+Local custom server alone (stdio expects JSON-RPC lines on stdin):
+
+```powershell
 python -m plant_energy_mcp
 ```
 
-The process waits for one-line JSON-RPC messages on `stdin`. Closing `stdin` terminates it cleanly.
+Chatbot with the custom local server:
 
-## Run the tests
-
-```bash
-python -m unittest discover -v
+```powershell
+python -m mcp_host --servers plant-local
 ```
 
-The tests start the actual server as a subprocess and verify the lifecycle, all five tools, JSON-only stdout, input validation, major JSON-RPC errors, and clean shutdown.
+Chatbot with all local servers:
 
-## Run the demonstration
-
-```bash
-python demo.py
+```powershell
+python -m mcp_host --servers plant-local,filesystem,git
 ```
 
-Expected milestones in the output are:
+Commands inside the chatbot are `/help`, `/tools`, `/log`, and `/exit`. The history exists only in the active process. Failures from one MCP server are reported without intentionally closing the other clients. Tool names that imply writing, adding, committing, deleting, moving, or recording require confirmation.
 
-1. `initialize` returns protocol version `2025-11-25` and server name `plant-energy-mcp`.
-2. `tools/list` returns five tool definitions and their JSON Schemas.
-3. `calculate_consumption` returns `220.0 kWh` and `55.0 kWh/hour` for `press-01`.
-4. `detect_usage_alerts` returns `status: normal` for that period.
-5. The server exits with code `0` after the harness closes `stdin`.
+## Official Filesystem and Git servers
 
-## MCP server specification
+The Windows Filesystem command used by the host is:
 
-The transport uses UTF-8-compatible, newline-delimited JSON. Each input and output message occupies exactly one line. Requests follow JSON-RPC 2.0 and responses preserve the request `id`.
-
-### Lifecycle
-
-The required order is:
-
-```text
-initialize request
-initialize response
-notifications/initialized notification (no response)
-ping, tools/list, or tools/call requests
+```powershell
+cmd /c npx -y @modelcontextprotocol/server-filesystem "<project>\demo_workspace"
 ```
 
-Requests for tools before the lifecycle completes return server error `-32002`.
+The allowed root is never the user's home directory. The Git server uses the activated `mcp-server-git` console command (or `uvx mcp-server-git`) and receives only `<project>/demo_workspace/git_repo`.
 
-### Supported methods
+Run the reproducible isolated demo:
 
-| Method | Purpose |
-|---|---|
-| `initialize` | Negotiate the MCP protocol version and server capabilities. |
-| `notifications/initialized` | Confirm that the client completed initialization; it produces no response. |
-| `ping` | Confirm that the initialized server is responsive. |
-| `tools/list` | Discover tool names, descriptions, and input schemas. |
-| `tools/call` | Validate arguments and execute one tool. |
+```powershell
+python -m demos.filesystem_git_demo
+```
 
-### JSON-RPC errors
+It creates a new uniquely named repository under ignored `demo_workspace/`, creates its README via Filesystem MCP, stages it with `git_add`, and commits it with `git_commit`. It never deletes or commits to the main repository.
 
-| Code | Meaning |
-|---:|---|
-| `-32700` | Invalid JSON / parse error |
-| `-32600` | Invalid JSON-RPC request |
-| `-32601` | Unknown method |
-| `-32602` | Invalid method or tool parameters |
-| `-32603` | Internal error with implementation details suppressed |
-| `-32002` | MCP lifecycle has not completed |
+## Custom server specification
 
-## Tool reference
+Server name: `plant-energy-mcp`. Protocol version: `2025-11-25`.
 
-### `list_equipment`
+| Tool | Parameters | Side effect |
+|---|---|---|
+| `list_equipment` | optional `area` | No |
+| `record_energy_reading` | `equipment_id`, ISO-8601 `timestamp`, nonnegative `energy_kwh` | Session memory write |
+| `calculate_consumption` | equipment and two recorded timestamps | No |
+| `detect_usage_alerts` | equipment and two recorded timestamps | No |
+| `get_energy_report` | optional `area` | No |
 
-Lists the deterministic equipment catalog. Optional `area` must be `Forming` or `Utilities`.
+Complete JSON Schemas are returned by `tools/list` from `plant_energy_mcp/tools.py`. Invalid parameters use JSON-RPC `-32602`; unknown methods use `-32601`; unexpected internal failures return `-32603` without a traceback.
+
+Handshake example:
 
 ```json
-{"area":"Utilities"}
-```
-
-### `record_energy_reading`
-
-Records a cumulative reading for the current process session. The timestamp must include a timezone, be later than the latest reading, and be unique. The cumulative value cannot decrease.
-
-```json
-{"equipment_id":"press-01","timestamp":"2026-08-20T13:00:00Z","energy_kwh":12770}
-```
-
-### `calculate_consumption`
-
-Subtracts two existing cumulative readings and calculates the average use per hour. Both timestamps must exactly match recorded readings.
-
-```json
-{"equipment_id":"press-01","start_timestamp":"2026-08-20T08:00:00Z","end_timestamp":"2026-08-20T12:00:00Z"}
-```
-
-Example structured result:
-
-```json
-{"equipment_id":"press-01","start_timestamp":"2026-08-20T08:00:00Z","end_timestamp":"2026-08-20T12:00:00Z","consumption_kwh":220.0,"average_kwh_per_hour":55.0}
-```
-
-### `detect_usage_alerts`
-
-Uses the same three period parameters as `calculate_consumption` and compares the result with the configured equipment threshold.
-
-### `get_energy_report`
-
-Summarizes consumption from the first to latest reading for every item. Optional `area` accepts `Forming` or `Utilities`.
-
-```json
-{}
-```
-
-## Manual JSON-RPC example
-
-Start `python -m plant_energy_mcp`, then paste each JSON object as a single line:
-
-```json
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual-client","version":"1.0"}}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"demo","version":"1.0"}}}
 {"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
-{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"calculate_consumption","arguments":{"equipment_id":"press-01","start_timestamp":"2026-08-20T08:00:00Z","end_timestamp":"2026-08-20T12:00:00Z"}}}
 ```
 
-The notification intentionally has no response. Every other line returned on `stdout` is a valid JSON-RPC response.
+Example conversation (LLM wording varies):
 
-## Five-minute demo scenario
+```text
+You> Which equipment is above its usage threshold?
+Bot> [calls plant_local__get_energy_report]
+Bot> compressor-01 is above its configured threshold; the other two are normal.
+You> Which plant area is it in?
+Bot> It is in Utilities.
+```
 
-1. Explain that cumulative industrial meter readings must be converted into understandable consumption and alerts.
-2. Show the four-layer architecture above.
-3. Run `python demo.py` to demonstrate initialization, discovery, consumption, and alert evaluation.
-4. Send a `tools/call` with an unknown `equipment_id` to show a controlled `-32602` response.
-5. Run `python -m unittest discover -v` and show the passing subprocess tests.
+## Remote server and container
 
-## Data and reset behavior
+Run locally:
 
-The equipment and seed readings are fictional demonstration fixtures. New readings live only in process memory. Restarting the server restores the original deterministic dataset; no files or databases are modified.
+```powershell
+$env:PLANT_MCP_HOST = "127.0.0.1"
+$env:PORT = "8080"
+python -m plant_energy_mcp.http_server
+```
 
-## Security considerations
+In another terminal:
 
-- The server never evaluates code, invokes a shell, accesses the network, or reads arbitrary paths.
-- Tool inputs reject unknown fields, wrong types, missing values, invalid equipment, invalid time order, decreasing cumulative values, and excessive meter values.
-- Client errors do not expose stack traces, filesystem paths, or secrets.
-- All demo data is fictional and contains no credentials or personal information.
-- `stdout` is reserved for protocol JSON; human-readable messages use `stderr`.
+```powershell
+$env:PLANT_MCP_REMOTE_URL = "http://127.0.0.1:8080/mcp"
+python -m demos.local_remote_parity_demo
+```
 
-## Limitations
+The health endpoint is `GET /health`; MCP uses `POST /mcp`. `GET /mcp` deliberately returns 405 because this implementation does not offer a standalone SSE listening stream. The server validates `Origin`, authentication, body size, `Content-Type`, both required `Accept` types, protocol version, session identifier, and JSON-RPC structure. A non-loopback bind requires `PLANT_MCP_AUTH_TOKEN`.
 
-- State is in memory and is not shared between server processes.
-- Consumption requires timestamps that exactly match recorded readings; interpolation is intentionally out of scope.
-- Thresholds are static demonstration values, not engineering recommendations.
-- No authentication is implemented because this delivery uses a local child process over `stdio`.
-- The server is not yet connected to an LLM or a chatbot.
+Container verification:
 
-## Pending items for the complete "First part"
+```powershell
+docker build -t plant-energy-mcp:local .
+docker run --rm -p 8080:8080 -e PLANT_MCP_AUTH_TOKEN=replace-with-a-random-demo-token plant-energy-mcp:local
+```
 
-These items are not implemented in this partial delivery and must be confirmed with the instructor:
+Cloud Run preparation (do not run without authorization and a selected Google Cloud project):
 
-- connect a chatbot to an LLM API using credentials loaded from the environment;
-- preserve conversational context within a session;
-- display a correlated, secret-free MCP request/response interaction log;
-- integrate the official local Filesystem server with explicit allowed directories;
-- integrate the official local Git server;
-- invoke this custom local server from the chatbot using natural language.
+```powershell
+gcloud run deploy plant-energy-mcp --source . --region us-central1 --allow-unauthenticated --set-secrets PLANT_MCP_AUTH_TOKEN=plant-mcp-auth-token:latest
+```
 
-## Publication checklist
+Create `plant-mcp-auth-token` in Secret Manager first, with IAM access limited to the Cloud Run service account. `--allow-unauthenticated` exposes the HTTP ingress, while the application still rejects `/mcp` without its bearer token; `/health` remains intentionally public. After deployment, set `PLANT_MCP_REMOTE_URL=https://REAL_URL/mcp`, configure the matching token, and run the parity demo.
 
-Before the private GitHub submission:
+## MCP audit log
 
-```bash
+All clients write `.runtime/mcp_interactions.jsonl` with UTC timestamp, server, transport, direction, method, correlation ID, duration, summary, and error code. Keys matching authorization, token, secret, password, or API-key patterns are replaced with `[REDACTED]`; project-root paths are replaced with `[PROJECT_ROOT]`; long content is truncated. Use `/log` in the chatbot to show the last 20 records.
+
+## Tests and checks
+
+```powershell
 python -m unittest discover -v
-python demo.py
-git status --short
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy
+python -m compileall -q plant_energy_mcp mcp_host demos
 git diff --check
-git log --oneline --decorate -n 15
 ```
 
-Verify the repository remains private and grant the instructor and teaching assistants access manually. This project does not publish, change repository visibility, rewrite history, or push automatically.
+The unit/integration suite does not need Internet, an LLM key, or cloud resources. The official-server and live-LLM demos are deliberately separate.
 
-## References
+## Wireshark procedure
 
-- Model Context Protocol specification, version `2025-11-25`: <https://modelcontextprotocol.io/specification/2025-11-25>
-- JSON-RPC 2.0 specification: <https://www.jsonrpc.org/specification>
+1. Deploy the server and resolve its hostname with `Resolve-DnsName <host>` (Windows) or `dig <host>`.
+2. Select the active Wi-Fi/Ethernet interface, not loopback, when calling the cloud URL.
+3. Use capture filter `host <resolved-ip> and tcp port 443`. Start capture before running the parity demo.
+4. Use display filter `dns or tcp.port == 443 or tls or http2`. Identify DNS, TCP handshake, TLS setup, encrypted application data, and close packets.
+5. To inspect owned-client TLS legitimately, set `SSLKEYLOGFILE` before starting Python and configure Wireshark at Preferences > Protocols > TLS > (Pre)-Master-Secret log filename. Do not capture or publish bearer tokens.
+6. Record only values actually observed in `docs/FINAL_REPORT.md`; sanitize the capture before sharing.
+
+JSON-RPC is normally encrypted inside TLS and cannot be read merely by filtering HTTP. For a localhost learning capture, use the loopback adapter and display filter `http and tcp.port == 8080`, but this does not replace cloud evidence.
+
+## Security, limitations, and troubleshooting
+
+- Demo data is in memory and resets per server session.
+- The host does not execute arbitrary shell commands. External server commands are fixed in `mcp_host/config.py`.
+- Official server access is restricted to the ignored demo workspace.
+- Authentication is a demonstration bearer token; production should use the cloud provider's identity layer and secret store.
+- A live LLM response is unverified until the student configures a valid provider key/model.
+- Cloud latency, public URL, IP addresses, and packet details are intentionally not invented.
+
+Common issues:
+
+- `LLM_API_KEY is missing`: export `LLM_API_KEY` and `LLM_MODEL` in the same terminal.
+- `No module named mcp_server_git`: activate `.venv` and install `requirements-official-mcp.txt`.
+- npx registry/cache error: confirm Internet access, npm proxy settings, and retry the official command.
+- `HTTP 401`: client and remote server tokens differ.
+- `Unknown or expired MCP session`: call `initialize` again and retain `MCP-Session-Id`.
+- PowerShell blocks activation: use `Set-ExecutionPolicy -Scope Process Bypass`, then activate again.
+
+## Sources
+
+- [MCP 2025-11-25 transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
+- [Official Filesystem MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)
+- [Official Git MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/git)
+- [JSON-RPC 2.0 specification](https://www.jsonrpc.org/specification)

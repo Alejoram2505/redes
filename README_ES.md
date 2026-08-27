@@ -242,18 +242,22 @@ Los equipos y lecturas iniciales son datos ficticios y deterministas. Las nuevas
 - El cálculo requiere fechas que coincidan exactamente con lecturas registradas.
 - Los umbrales son valores ficticios, no recomendaciones de ingeniería.
 - No hay autenticación porque el transporte es un subproceso local por `stdio`.
-- El servidor todavía no está conectado a un LLM o chatbot.
+- El estado del servidor industrial se conserva en memoria y se reinicia al cerrar la sesión.
 
-## Pendientes de la primera parte completa
+## Estado de la integración final
 
-Los siguientes puntos están fuera de esta entrega parcial y deben confirmarse con el catedrático:
+La implementación final amplía este servidor local con los siguientes componentes:
 
-- conectar un chatbot con un LLM mediante API y variables de entorno;
-- conservar el contexto conversacional durante una sesión;
-- mostrar un log correlacionado de solicitudes y respuestas MCP sin secretos;
-- integrar el servidor oficial Filesystem con directorios explícitamente permitidos;
-- integrar el servidor oficial Git;
-- permitir que el chatbot invoque este servidor mediante lenguaje natural.
+- chatbot de terminal con adaptadores configurables para OpenAI y Anthropic;
+- contexto conversacional en memoria durante la sesión;
+- log correlacionado y sanitizado de solicitudes y respuestas MCP;
+- integración de los servidores oficiales Filesystem y Git en un espacio aislado;
+- transporte HTTP con sesiones para ejecutar el mismo servidor industrial de forma remota;
+- pruebas automatizadas de protocolo, herramientas, contexto, logging y paridad de transportes.
+
+La documentación vigente de la solución completa está en `README.md`, `docs/FINAL_REPORT.md` y
+`docs/PRESENTATION_GUIDE.md`. La ejecución con servicios externos depende de credenciales provistas mediante variables de
+entorno; el repositorio no contiene secretos.
 
 ## Lista de verificación antes de entregar
 
