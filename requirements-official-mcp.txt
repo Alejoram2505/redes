@@ -1,0 +1,3 @@
+# Official Git MCP server required by the course guide.
+# It is an external official server; this project's MCP clients/servers remain manual.
+mcp-server-git

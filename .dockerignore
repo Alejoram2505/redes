@@ -1,0 +1,11 @@
+.git
+.env
+.venv
+__pycache__
+*.pyc
+*.pcap*
+.runtime
+demo_workspace
+docs
+tests
+GUIA_PERSONAL_PROYECTO.txt
