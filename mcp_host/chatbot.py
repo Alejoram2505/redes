@@ -76,33 +76,45 @@ class ChatSession:
                 self.failures[client.name] = str(exc)
 
     def ask(self, text: str, *, max_tool_rounds: int = 6) -> str:
+        initial_length = len(self.messages)
         self.messages.append({"role": "user", "content": text})
-        for _ in range(max_tool_rounds):
-            reply = self.provider.complete(self.messages, [item.definition for item in self.tools.values()])
-            assistant: dict[str, Any] = {"role": "assistant", "content": reply.text or ""}
-            if reply.tool_calls:
-                assistant["tool_calls"] = [
-                    {
-                        "id": call["id"],
-                        "type": "function",
-                        "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments", {}))},
-                    }
-                    for call in reply.tool_calls
-                ]
-            self.messages.append(assistant)
-            if not reply.tool_calls:
-                return reply.text
-            for call in reply.tool_calls:
-                result = self._execute(call["name"], call.get("arguments", {}))
-                self.messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call["id"],
-                        "name": call["name"],
-                        "content": json.dumps(result, ensure_ascii=False),
-                    }
-                )
-        raise RuntimeError("LLM exceeded the tool-call round limit")
+        try:
+            for _ in range(max_tool_rounds):
+                reply = self.provider.complete(self.messages, [item.definition for item in self.tools.values()])
+                assistant: dict[str, Any] = {"role": "assistant", "content": reply.text or ""}
+                if reply.tool_calls:
+                    assistant_calls = []
+                    for call in reply.tool_calls:
+                        assistant_call = {
+                            "id": call["id"],
+                            "type": "function",
+                            "function": {"name": call["name"], "arguments": json.dumps(call.get("arguments", {}))},
+                        }
+                        if "extra_content" in call:
+                            assistant_call["extra_content"] = call["extra_content"]
+                        assistant_calls.append(assistant_call)
+                    assistant["tool_calls"] = assistant_calls
+                self.messages.append(assistant)
+                if not reply.tool_calls:
+                    return reply.text
+                for call in reply.tool_calls:
+                    result = self._execute(call["name"], call.get("arguments", {}))
+                    self.messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "name": call["name"],
+                            "content": json.dumps(result, ensure_ascii=False),
+                        }
+                    )
+            raise RuntimeError("LLM exceeded the tool-call round limit")
+        except Exception:
+            del self.messages[initial_length:]
+            raise
+
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute one discovered MCP tool directly, without involving the LLM."""
+        return self._execute(name, arguments or {})
 
     def _execute(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         routed = self.tools.get(name)

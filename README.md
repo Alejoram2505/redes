@@ -12,13 +12,13 @@ The industrial scenario monitors cumulative energy readings for plant equipment,
 |---|---|
 | Custom local MCP over stdio | Implemented and tested |
 | Manual stdio/HTTP MCP clients | Implemented and tested |
-| Session conversation and tool loop | Tested with a fake LLM |
-| OpenAI/Anthropic API adapters | Implemented; live test requires the student's key/model |
+| Session conversation and tool loop | Tested automatically and verified live with Gemini |
+| LLM API adapter | Verified with Gemini `gemini-3.1-flash-lite` through its OpenAI-compatible endpoint |
 | Official Filesystem + Git isolated demo | Tested locally |
-| Custom remote transport | Tested on localhost; Docker build blocked because Docker Desktop was stopped; cloud deployment pending authorization |
-| Wireshark evidence | Procedure ready; capture pending Wireshark and a deployed URL |
+| Custom remote transport | Deployed on Render and verified with `equal: true` against the local server |
+| Wireshark evidence | Local HTTP practice capture verified; final HTTPS capture against Render remains pending |
 
-No cloud resource is created by the repository commands unless the user explicitly runs the deployment command.
+The verified remote endpoint is `https://plant-energy-mcp.onrender.com/mcp`. It requires the private bearer token configured in Render; the token is never stored in the repository.
 
 ## Architecture
 
@@ -49,8 +49,8 @@ Important paths:
 - Node.js and npm/npx for the official Filesystem server (tested with Node 22.14.0 and npx 10.9.2).
 - `mcp-server-git` for the official Git server.
 - Docker for the optional container workflow (Docker 28.1.1 was detected, but its daemon was not running during verification).
-- An OpenAI or Anthropic API key and model identifier for a live LLM test.
-- Wireshark for the real network capture; it was not installed in the verification environment.
+- A supported LLM API key and model identifier. Gemini was verified through its OpenAI-compatible endpoint.
+- Wireshark for the real network capture (Wireshark/TShark 4.6.7 was detected locally).
 
 ## Installation
 
@@ -91,7 +91,30 @@ $env:LLM_BASE_URL = "https://api.openai.com/v1"
 
 Anthropic uses `LLM_PROVIDER=anthropic` and the provider's model identifier. No model name or key is hardcoded because availability depends on the student's account.
 
+Gemini example for Windows PowerShell 5.1 or newer:
+
+```powershell
+$secureKey = Read-Host -Prompt "Gemini API key" -AsSecureString
+$env:LLM_API_KEY = (New-Object System.Net.NetworkCredential("", $secureKey)).Password
+Remove-Variable secureKey
+$env:LLM_PROVIDER = "openai"
+$env:LLM_MODEL = "gemini-3.1-flash-lite"
+$env:LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+```
+
+Here `openai` selects the compatible request format; Gemini remains the actual provider. The project number is not an API key.
+
 ## Run
+
+### Graphical presentation panel
+
+The simplest way to operate and present the complete project is the local desktop interface:
+
+```powershell
+python -m project_gui
+```
+
+It keeps the Gemini key and remote MCP token only in process memory, normalizes accidentally pasted Markdown URLs, connects any combination of the four servers, provides the contextual chatbot, displays the MCP log, and runs the Render health check, local/remote parity demo, Filesystem/Git demo, and test suite from one window. In the GUI, `/tools` opens a local tool picker with schema-derived JSON arguments and executes the selection directly through MCP without calling the LLM; `/log` opens the recorded MCP traffic. The terminal commands remain available as a technical fallback and for reproducible automation.
 
 Local custom server alone (stdio expects JSON-RPC lines on stdin):
 
@@ -165,6 +188,15 @@ Bot> It is in Utilities.
 
 ## Remote server and container
 
+Verified Render deployment:
+
+```text
+Health: https://plant-energy-mcp.onrender.com/health
+MCP:    https://plant-energy-mcp.onrender.com/mcp
+```
+
+The student-run verification returned HTTP 200 from `/health` five consecutive times and `equal: true` from the local/remote parity demo. The free service can spin down after inactivity, so open `/health` shortly before a demonstration.
+
 Run locally:
 
 ```powershell
@@ -231,7 +263,7 @@ JSON-RPC is normally encrypted inside TLS and cannot be read merely by filtering
 - The host does not execute arbitrary shell commands. External server commands are fixed in `mcp_host/config.py`.
 - Official server access is restricted to the ignored demo workspace.
 - Authentication is a demonstration bearer token; production should use the cloud provider's identity layer and secret store.
-- A live LLM response is unverified until the student configures a valid provider key/model.
+- Gemini `gemini-3.1-flash-lite` answered a general question and preserved the Alan Turing follow-up context in a student-run live test.
 - Cloud latency, public URL, IP addresses, and packet details are intentionally not invented.
 
 Common issues:
@@ -240,6 +272,8 @@ Common issues:
 - `No module named mcp_server_git`: activate `.venv` and install `requirements-official-mcp.txt`.
 - npx registry/cache error: confirm Internet access, npm proxy settings, and retry the official command.
 - `HTTP 401`: client and remote server tokens differ.
+- `LLM API returned HTTP 400` during a Gemini 3 tool call: the host preserves and replays Gemini's `extra_content.google.thought_signature` across tool rounds. Restart the GUI so it loads the current adapter; any remaining 400 includes the provider's safe structured explanation.
+- `LLM API returned HTTP 503`: Gemini is temporarily overloaded. The adapter automatically retries transient failures up to four times with exponential backoff and jitter. If all attempts fail, wait briefly and submit again; the GUI restores the failed prompt and the session does not retain a duplicate.
 - `Unknown or expired MCP session`: call `initialize` again and retain `MCP-Session-Id`.
 - PowerShell blocks activation: use `Set-ExecutionPolicy -Scope Process Bypass`, then activate again.
 
@@ -249,3 +283,4 @@ Common issues:
 - [Official Filesystem MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem)
 - [Official Git MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/git)
 - [JSON-RPC 2.0 specification](https://www.jsonrpc.org/specification)
+- [Gemini API troubleshooting](https://ai.google.dev/gemini-api/docs/troubleshooting)

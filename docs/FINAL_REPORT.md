@@ -4,20 +4,20 @@
 
 | Inciso | Requisito | Estado y evidencia |
 |---:|---|---|
-| 1 | Conexión con LLM | Adaptadores OpenAI y Anthropic implementados; pruebas deterministas aprobadas. La ejecución externa no estuvo disponible por ausencia de credenciales en el entorno. |
+| 1 | Conexión con LLM | Adaptadores implementados y pruebas deterministas aprobadas. El estudiante verificó una llamada real a Gemini `gemini-3.1-flash-lite` mediante su endpoint compatible con OpenAI. |
 | 2 | Contexto conversacional | Implementado en memoria por sesión y probado con doble de LLM. |
 | 3 | Log MCP visible | Implementado en JSONL, visible con `/log`, con redacción probada. |
 | 4 | Filesystem y Git oficiales | Implementado y probado en repositorio aislado el 26-08-2026. |
 | 5 | Servidor MCP local propio | Implementado y probado: `plant-energy-mcp`, cinco herramientas. |
-| 6 | Mismo servidor remoto | Transporte HTTP implementado y paridad local probada. Dockerfile creado; el motor Docker y un destino cloud autorizado no estuvieron disponibles. |
-| 7 | Captura Wireshark | Procedimiento reproducible documentado. El entorno no tenía Wireshark ni una URL cloud, por lo que no se atribuyen observaciones de paquetes. |
+| 6 | Mismo servidor remoto | Desplegado en Render y probado mediante `https://plant-energy-mcp.onrender.com/mcp`; la paridad local/remota devolvió `equal: true`. |
+| 7 | Captura Wireshark | Wireshark/TShark 4.6.7 está instalado y se verificó una captura HTTP local de ensayo. La captura HTTPS final contra Render sigue pendiente. |
 | 8 | Especificación | Documentada aquí y en README. |
 | 9 | Capas de red | Metodología de análisis documentada; no se reportan valores de red sin una captura real. |
 | 10 | Conclusiones | Incluidas con el alcance y las limitaciones de la verificación ejecutada. |
 
 ## 2. Arquitectura
 
-El anfitrión de terminal mantiene el historial de la sesión, envía mensajes y esquemas de herramientas al LLM, interpreta llamadas a herramientas y solicita autorización para efectos laterales. Cada herramienta tiene un nombre con prefijo del servidor para evitar colisiones. Los clientes MCP manuales realizan `initialize`, reciben la versión negociada, envían `notifications/initialized`, descubren `tools/list` y ejecutan `tools/call`.
+El anfitrión mantiene el historial de la sesión, envía mensajes y esquemas de herramientas al LLM, interpreta llamadas a herramientas y solicita autorización para efectos laterales. Se ofrece tanto la terminal original como `project_gui`, una interfaz gráfica que centraliza conversación, log y demostraciones sin sustituir el protocolo manual. Cada herramienta tiene un nombre con prefijo del servidor para evitar colisiones. Los clientes MCP manuales realizan `initialize`, reciben la versión negociada, envían `notifications/initialized`, descubren `tools/list` y ejecutan `tools/call`.
 
 Los servidores locales se ejecutan como subprocesos con JSON delimitado por salto de línea sobre stdin/stdout. El remoto emplea un único endpoint `/mcp` con JSON-RPC sobre HTTP. Ambos adaptadores del servidor industrial reutilizan `McpDispatcher`, `ToolRegistry` y `EnergyService`; por ello no duplican lógica de negocio.
 
@@ -65,7 +65,7 @@ La demostración real del 26-08-2026 inicializó un repositorio aislado, creó `
 
 La inicialización crea un identificador criptográficamente aleatorio y lo devuelve en `MCP-Session-Id`. Solicitudes posteriores deben incluirlo y enviar `MCP-Protocol-Version: 2025-11-25`. Se validan `Origin`, `Content-Type: application/json`, `Accept: application/json, text/event-stream`, tamaño máximo, autenticación y estructura JSON. Una escucha fuera de loopback exige `PLANT_MCP_AUTH_TOKEN`. Los errores HTTP no revelan trazas internas.
 
-La prueba local de paridad devolvió `equal: true` para `get_energy_report`: local y HTTP reportaron 3 equipos, 548.0 kWh totales y los mismos estados. Esto valida el adaptador, pero no sustituye una prueba en nube.
+La prueba contra Render devolvió `equal: true` para `get_energy_report`: local y remoto reportaron 3 equipos, 548.0 kWh totales y los mismos estados. Antes de la prueba, `https://plant-energy-mcp.onrender.com/health` respondió HTTP 200 cinco veces consecutivas. El endpoint `/mcp` está protegido mediante `PLANT_MCP_AUTH_TOKEN`, almacenado como variable secreta del servicio y no en el repositorio.
 
 Se intentó `docker build -t plant-energy-mcp:local .`, pero Docker Desktop no tenía activo el motor Linux (`dockerDesktopLinuxEngine`). Por lo tanto, el Dockerfile está preparado pero su build no se presenta como aprobado.
 
@@ -77,12 +77,12 @@ Las operaciones cuyo nombre implica escribir, crear, eliminar, mover, agregar, c
 
 ## 7. Alcance de la captura Wireshark
 
-No se inventaron paquetes ni valores. En el entorno verificado no estaban instalados Wireshark ni tshark y no existe aún una URL cloud autorizada.
+Se realizó una captura local de ensayo sobre el adaptador loopback y el puerto 8080: registró 54 paquetes, tres solicitudes `POST /mcp` y una `DELETE /mcp`; la demo produjo `equal: true`. El servidor remoto ya está disponible en Render, pero todavía debe realizarse y documentarse la captura HTTPS final contra ese dominio.
 
 ### Procedimiento reproducible
 
-1. Desplegar el contenedor con autorización y verificar `/health`.
-2. Resolver el host (`Resolve-DnsName HOST`) y seleccionar en Wireshark la interfaz Wi-Fi/Ethernet que transporta esa conexión.
+1. Abrir `https://plant-energy-mcp.onrender.com/health` y esperar HTTP 200 para despertar la instancia gratuita.
+2. Ejecutar `Resolve-DnsName plant-energy-mcp.onrender.com` y seleccionar en Wireshark la interfaz Wi-Fi/Ethernet que transporta esa conexión.
 3. Filtro de captura: `host IP_RESUELTA and tcp port 443`.
 4. Iniciar captura y ejecutar `python -m demos.local_remote_parity_demo` con la URL remota.
 5. Filtro de visualización: `dns or tcp.port == 443 or tls or http2`.
@@ -122,7 +122,7 @@ No se inventaron paquetes ni valores. En el entorno verificado no estaban instal
 
 ## 10. Conclusiones
 
-La solución demuestra la arquitectura anfitrión–cliente–servidor, una implementación manual de JSON-RPC/MCP y la reutilización de una misma lógica industrial en dos transportes. Las validaciones locales demuestran contexto, herramientas, logging, manejo de errores, seguridad básica y paridad. Antes de declarar la entrega totalmente completa faltan dos evidencias externas: una llamada real al LLM con la cuenta del estudiante y el despliegue/captura remota autorizados. Esas limitaciones están visibles y cuentan con comandos de resolución.
+La solución demuestra la arquitectura anfitrión–cliente–servidor, una implementación manual de JSON-RPC/MCP y la reutilización de una misma lógica industrial en dos transportes. Gemini, los servidores locales y el despliegue Render ya fueron verificados, incluida la paridad local/remota. Antes de declarar la entrega totalmente completa falta realizar la captura HTTPS contra Render y completar la tabla de valores realmente observados.
 
 ## Fuentes
 

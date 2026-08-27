@@ -8,7 +8,7 @@ select = ["E", "F", "I", "W"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["plant_energy_mcp", "mcp_host", "demos"]
+files = ["plant_energy_mcp", "mcp_host", "demos", "project_gui"]
 check_untyped_defs = true
 warn_unused_ignores = true
 show_error_codes = true

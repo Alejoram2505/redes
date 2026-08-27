@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -20,16 +22,55 @@ class LlmProvider(Protocol):
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> LlmReply: ...
 
 
-def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float = 60) -> dict[str, Any]:
-    request = urllib.request.Request(
-        url, json.dumps(payload).encode(), headers={"Content-Type": "application/json", **headers}, method="POST"
-    )
+TRANSIENT_HTTP_CODES = {408, 429, 500, 502, 503, 504}
+
+
+def _http_error_detail(exc: urllib.error.HTTPError) -> str:
+    """Return only the provider's structured status/message, never the request."""
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read())
-    except urllib.error.HTTPError as exc:
-        # Do not expose response bodies, which could repeat sensitive input.
-        raise RuntimeError(f"LLM API returned HTTP {exc.code}") from exc
+        data = json.loads(exc.read(16_384))
+    except (AttributeError, json.JSONDecodeError, OSError, TypeError, UnicodeDecodeError):
+        return ""
+    error = data.get("error") if isinstance(data, dict) else None
+    if not isinstance(error, dict):
+        return ""
+    status = str(error.get("status") or "").strip()
+    message = " ".join(str(error.get("message") or "").split())[:500]
+    parts = [part for part in (status, message) if part]
+    return f": {' — '.join(parts)}" if parts else ""
+
+
+def _post_json(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    timeout: float = 60,
+    max_attempts: int = 4,
+) -> dict[str, Any]:
+    for attempt in range(max_attempts):
+        request = urllib.request.Request(
+            url, json.dumps(payload).encode(), headers={"Content-Type": "application/json", **headers}, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            code = exc.code
+            detail = _http_error_detail(exc)
+            exc.close()
+            if code not in TRANSIENT_HTTP_CODES:
+                # Do not expose response bodies, which could repeat sensitive input.
+                raise RuntimeError(f"LLM API returned HTTP {code}{detail}") from exc
+            if attempt == max_attempts - 1:
+                raise RuntimeError(
+                    f"LLM API temporarily unavailable after {max_attempts} attempts (HTTP {code}). Try again shortly."
+                ) from exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt == max_attempts - 1:
+                raise RuntimeError(f"LLM API network error after {max_attempts} attempts") from exc
+        delay = (2**attempt) + random.uniform(0, 0.25 * (2**attempt))
+        time.sleep(delay)
+    raise RuntimeError("LLM API request failed")
 
 
 class OpenAiProvider:
@@ -54,14 +95,18 @@ class OpenAiProvider:
             payload["tools"] = schema
         data = _post_json(self.url, {"Authorization": f"Bearer {self.api_key}"}, payload)
         message = data["choices"][0]["message"]
-        calls = [
-            {
+        calls = []
+        for call in message.get("tool_calls", []):
+            parsed_call = {
                 "id": call["id"],
                 "name": call["function"]["name"],
                 "arguments": json.loads(call["function"].get("arguments") or "{}"),
             }
-            for call in message.get("tool_calls", [])
-        ]
+            # Gemini 3 returns its required thought signature here. It must be
+            # replayed unchanged with the assistant tool call on the next turn.
+            if "extra_content" in call:
+                parsed_call["extra_content"] = call["extra_content"]
+            calls.append(parsed_call)
         return LlmReply(message.get("content") or "", calls)
 
 
