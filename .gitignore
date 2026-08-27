@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+.ruff_cache/
 htmlcov/
 .coverage
-
+.runtime/
+demo_workspace/
+*.pcap
+*.pcapng

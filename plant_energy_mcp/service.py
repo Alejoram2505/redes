@@ -6,8 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-
-EQUIPMENT = {
+EQUIPMENT: dict[str, dict[str, Any]] = {
     "press-01": {
         "name": "Hydraulic press 01",
         "area": "Forming",
@@ -28,7 +27,7 @@ EQUIPMENT = {
     },
 }
 
-INITIAL_READINGS = {
+INITIAL_READINGS: dict[str, list[dict[str, Any]]] = {
     "press-01": [
         {"timestamp": "2026-08-20T08:00:00Z", "energy_kwh": 12500.0},
         {"timestamp": "2026-08-20T12:00:00Z", "energy_kwh": 12720.0},
@@ -163,4 +162,3 @@ class EnergyService:
             "total_consumption_kwh": round(sum(row["consumption_kwh"] for row in rows), 3),
             "items": rows,
         }
-

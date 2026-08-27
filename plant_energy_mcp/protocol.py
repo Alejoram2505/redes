@@ -9,7 +9,6 @@ from . import __version__
 from .service import ToolInputError
 from .tools import ToolRegistry
 
-
 PROTOCOL_VERSION = "2025-11-25"
 
 
@@ -79,6 +78,8 @@ class McpDispatcher:
             requested = params.get("protocolVersion")
             if not isinstance(requested, str):
                 raise JsonRpcError(-32602, "Invalid params", "protocolVersion is required")
+            if requested != PROTOCOL_VERSION:
+                raise JsonRpcError(-32602, "Unsupported protocol version", {"supported": [PROTOCOL_VERSION]})
             self.initialized = True
             return {
                 "protocolVersion": PROTOCOL_VERSION,
@@ -109,4 +110,3 @@ class McpDispatcher:
                 "isError": False,
             }
         raise JsonRpcError(-32601, "Method not found")
-

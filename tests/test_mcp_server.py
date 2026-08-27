@@ -40,7 +40,14 @@ class ServerProcess:
         self.send({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
 
     def call_tool(self, request_id: int, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        self.send({"jsonrpc": "2.0", "id": request_id, "method": "tools/call", "params": {"name": name, "arguments": arguments}})
+        self.send(
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+        )
         return self.receive()
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
@@ -68,10 +75,17 @@ class McpServerIntegrationTests(unittest.TestCase):
         self.assertIn("shutting down cleanly", server.stderr)
 
     def test_each_tool_success(self) -> None:
-        period = {"equipment_id": "press-01", "start_timestamp": "2026-08-20T08:00:00Z", "end_timestamp": "2026-08-20T12:00:00Z"}
+        period = {
+            "equipment_id": "press-01",
+            "start_timestamp": "2026-08-20T08:00:00Z",
+            "end_timestamp": "2026-08-20T12:00:00Z",
+        }
         cases = [
             ("list_equipment", {}),
-            ("record_energy_reading", {"equipment_id": "press-01", "timestamp": "2026-08-20T13:00:00Z", "energy_kwh": 12770}),
+            (
+                "record_energy_reading",
+                {"equipment_id": "press-01", "timestamp": "2026-08-20T13:00:00Z", "energy_kwh": 12770},
+            ),
             ("calculate_consumption", period),
             ("detect_usage_alerts", period),
             ("get_energy_report", {}),
@@ -116,7 +130,11 @@ class McpServerIntegrationTests(unittest.TestCase):
             response = server.call_tool(
                 31,
                 "calculate_consumption",
-                {"equipment_id": "missing", "start_timestamp": "2026-08-20T08:00:00Z", "end_timestamp": "2026-08-20T12:00:00Z"},
+                {
+                    "equipment_id": "missing",
+                    "start_timestamp": "2026-08-20T08:00:00Z",
+                    "end_timestamp": "2026-08-20T12:00:00Z",
+                },
             )
             self.assertEqual(response["error"]["code"], -32602)
             self.assertNotIn("Traceback", json.dumps(response))

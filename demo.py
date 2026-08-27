@@ -59,12 +59,22 @@ def main() -> int:
         }
         send(
             process,
-            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "calculate_consumption", "arguments": period}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "calculate_consumption", "arguments": period},
+            },
         )
         show("tools/call calculate_consumption", receive(process))
         send(
             process,
-            {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "detect_usage_alerts", "arguments": period}},
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {"name": "detect_usage_alerts", "arguments": period},
+            },
         )
         show("tools/call detect_usage_alerts", receive(process))
     finally:

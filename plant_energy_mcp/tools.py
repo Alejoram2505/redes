@@ -6,7 +6,6 @@ from typing import Any, Callable
 
 from .service import EnergyService, ToolInputError
 
-
 AREA_SCHEMA = {"type": "string", "enum": ["Forming", "Utilities"]}
 PERIOD_PROPERTIES = {
     "equipment_id": {"type": "string", "minLength": 1},
@@ -14,7 +13,7 @@ PERIOD_PROPERTIES = {
     "end_timestamp": {"type": "string", "format": "date-time"},
 }
 
-TOOL_DEFINITIONS = [
+TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "list_equipment",
         "description": "List registered plant equipment, optionally filtered by area.",
@@ -116,7 +115,7 @@ class ToolRegistry:
             "detect_usage_alerts": self.service.detect_usage_alerts,
             "get_energy_report": self.service.get_energy_report,
         }
-        self._schemas = {tool["name"]: tool["inputSchema"] for tool in TOOL_DEFINITIONS}
+        self._schemas: dict[str, dict[str, Any]] = {tool["name"]: tool["inputSchema"] for tool in TOOL_DEFINITIONS}
 
     def list_tools(self) -> list[dict[str, Any]]:
         return TOOL_DEFINITIONS
@@ -126,4 +125,3 @@ class ToolRegistry:
             raise ToolInputError(f"unknown tool: {name}")
         validated = validate_arguments(arguments, self._schemas[name])
         return self._handlers[name](validated)
-

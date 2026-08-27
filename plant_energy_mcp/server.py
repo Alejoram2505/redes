@@ -30,4 +30,3 @@ def serve(stdin: TextIO, stdout: TextIO, stderr: TextIO) -> int:
 
 def main() -> int:
     return serve(sys.stdin, sys.stdout, sys.stderr)
-
